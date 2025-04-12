@@ -6,8 +6,12 @@ análisis de sentimiento usando mensajes en un topic de kafka y modelo roberta.
 ## Construir e iniciar los servicios
 docker-compose up -d --build
 
+
+
 ## Ejecutar el productor en una terminal
 docker exec -it runner python3 /app/producer/comment_producer.py
+
+**HELP** : Si este comando no funciona, esperar unos segundos, y volver a ejecutarlo.
 
 ## Ejecutar el consumidor en otra terminal
 docker exec -it runner python3 /app/consumer/sentiment_analyzer.py
