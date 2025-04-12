@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Consumer de Kafka que analiza el sentimiento de los comentarios usando exclusivamente
-un modelo de Hugging Face.
+Consumer de Kafka que analiza el sentimiento de los comentarios en español
+usando un modelo de Hugging Face especializado en español.
 """
 
 import json
@@ -10,8 +10,8 @@ import torch
 from kafka import KafkaConsumer
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-# Modelo de Hugging Face para análisis de sentimiento
-MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+# Modelo de Hugging Face para análisis de sentimiento en español
+MODEL_NAME = "pysentimiento/robertuito-sentiment-analysis"
 
 def create_consumer(topic_name):
     """Crea y retorna un consumidor de Kafka."""
@@ -29,19 +29,22 @@ def create_consumer(topic_name):
     )
     return consumer
 
-class HuggingFaceSentimentAnalyzer:
-    """Clase para analizar sentimiento utilizando un modelo de Hugging Face."""
+class SpanishSentimentAnalyzer:
+    """Clase para analizar sentimiento en español utilizando un modelo de Hugging Face."""
     
     def __init__(self, model_name):
-        """Inicializa el analizador con un modelo específico."""
-        print(f"Cargando modelo de Hugging Face: {model_name}")
+        """Inicializa el analizador con un modelo específico para español."""
+        print(f"Cargando modelo de Hugging Face para español: {model_name}")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        self.label_mapping = ["Negativo", "Neutro", "Positivo"]
+        
+        # Mapeo de etiquetas para el modelo español
+        # Este modelo clasifica en NEG (negativo), NEU (neutro) y POS (positivo)
+        self.id2label = self.model.config.id2label
         
     def analyze(self, text):
         """
-        Analiza el sentimiento del texto usando el modelo de Hugging Face.
+        Analiza el sentimiento del texto en español usando el modelo de Hugging Face.
         Retorna un diccionario con puntuaciones y clasificación.
         """
         # Tokenizar texto
@@ -52,19 +55,30 @@ class HuggingFaceSentimentAnalyzer:
             outputs = self.model(**inputs)
             scores = torch.nn.functional.softmax(outputs.logits, dim=1)[0].tolist()
             
-        # Obtener etiqueta con mayor score
-        predicted_class = scores.index(max(scores))
-        classification = self.label_mapping[predicted_class]
+        # Obtener etiqueta con mayor score y mapear a español
+        predicted_class_id = scores.index(max(scores))
+        predicted_label = self.id2label[predicted_class_id]
         
-        # Crear diccionario de resultados
+        # Mapear etiquetas a español
+        sentiment_map = {
+            "NEG": "Negativo",
+            "NEU": "Neutro",
+            "POS": "Positivo"
+        }
+        
+        classification = sentiment_map.get(predicted_label, predicted_label)
+        
+        # Crear diccionario de resultados con etiquetas en español
         results = {
             "classification": classification,
-            "scores": {
-                "negative": scores[0],
-                "neutral": scores[1],
-                "positive": scores[2]
-            }
+            "scores": {}
         }
+        
+        # Mapear puntuaciones a etiquetas en español
+        for i, score in enumerate(scores):
+            label = self.id2label[i]
+            spanish_label = sentiment_map.get(label, label).lower()
+            results["scores"][spanish_label] = score
         
         return results
 
@@ -73,8 +87,8 @@ def main():
     topic_name = "comments"
     consumer = create_consumer(topic_name)
     
-    print("Inicializando modelo de análisis de sentimiento...")
-    hf_analyzer = HuggingFaceSentimentAnalyzer(MODEL_NAME)
+    print("Inicializando modelo de análisis de sentimiento para español...")
+    sentiment_analyzer = SpanishSentimentAnalyzer(MODEL_NAME)
     
     print(f"Iniciando consumidor y análisis de sentimiento en el tema '{topic_name}'...")
     
@@ -85,8 +99,8 @@ def main():
             comment_text = comment_data.get("comment", "")
             timestamp = comment_data.get("timestamp", "")
             
-            # Analizar sentimiento usando el modelo de Hugging Face
-            analysis = hf_analyzer.analyze(comment_text)
+            # Analizar sentimiento usando el modelo para español
+            analysis = sentiment_analyzer.analyze(comment_text)
             
             # Crear resultado
             result = {
@@ -101,16 +115,16 @@ def main():
             print(f"COMENTARIO: {comment_text}")
             print(f"SENTIMIENTO: {analysis['classification']}")
             print(f"PROBABILIDADES: ")
-            print(f"  - Positivo: {analysis['scores']['positive']:.4f}")
-            print(f"  - Neutro: {analysis['scores']['neutral']:.4f}")
-            print(f"  - Negativo: {analysis['scores']['negative']:.4f}")
+            for label, score in analysis["scores"].items():
+                print(f"  - {label.capitalize()}: {score:.4f}")
             print("="*80 + "\n")
             
     except KeyboardInterrupt:
         print("Consumidor detenido por el usuario")
     except Exception as e:
         print(f"Error en el consumidor: {e}")
-        raise  # Re-lanzar la excepción para ver el error completo
+        import traceback
+        traceback.print_exc()  # Imprimir stack trace completo para mejor diagnóstico
     finally:
         consumer.close()
         print("Consumidor cerrado")
