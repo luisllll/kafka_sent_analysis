@@ -1,0 +1,29 @@
+FROM openjdk:17-slim
+
+# Instalar dependencias del sistema
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip curl unzip vim iputils-ping netcat && \
+    rm -rf /var/lib/apt/lists/*
+
+# Instalar Gradle
+ARG GRADLE_VERSION=8.4
+RUN curl -fsSL https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip -o gradle.zip \
+    && unzip gradle.zip -d /opt/ \
+    && rm gradle.zip \
+    && ln -s /opt/gradle-${GRADLE_VERSION}/bin/gradle /usr/bin/gradle
+
+# Copiar requirements.txt
+COPY requirements.txt /tmp/
+
+# Instalar dependencias de Python
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Crear estructura de directorios
+WORKDIR /app
+
+# Copiar archivos del proyecto
+COPY producer /app/producer
+COPY consumer /app/consumer
+
+# Mantener el contenedor ejecutándose
+ENTRYPOINT ["/bin/bash", "-c", "sleep 86400"]

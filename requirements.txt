@@ -1,0 +1,5 @@
+kafka-python==2.1.2
+confluent-kafka==2.8.2
+quixstreams==3.12.0
+torch==2.0.1
+transformers==4.30.2
